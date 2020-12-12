@@ -1,8 +1,8 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
+	"my_store/redis"
 	"net"
 	"os"
 )
@@ -10,21 +10,20 @@ import (
 const (
 	cDefaultPort = "3000"
 	cDefaultHost = "localhost"
-	cFormat      = "$%d\r\n%s\r\n"
-	cNumberInCMD = 3
 	cHelpText    = `my_store_client GET NAME MANOJ
 	SET NAME MYNAME
 	DEL NAME`
 )
 
 var arguments []string
+var argNumbers map[string]int
 
 func main() {
 	arguments = os.Args
 	var hostAndPort string
-	if len(arguments) == 4 {
-		hostAndPort = fmt.Sprintf("%s:%s", cDefaultHost, cDefaultPort)
-	} else {
+	argNumbers = map[string]int{"GET": 2, "SET": 3, "DEL": 2}
+	hostAndPort = fmt.Sprintf("%s:%s", cDefaultHost, cDefaultPort)
+	if argNumbers[arguments[1]] == 0 || len(arguments[1:]) != argNumbers[arguments[1]] {
 		fmt.Println(cHelpText)
 		return
 	}
@@ -36,18 +35,13 @@ func main() {
 		return
 	}
 
-	fmt.Fprintf(c, encodeToRedisPrrotocolSpec())
-	message, _ := bufio.NewReader(c).ReadString('\n')
-	fmt.Print("->: " + message)
+	fmt.Fprintf(c, encodeToRedisProtocolSpec())
+	message := make([]byte, 1024)
+	_, err = c.Read(message)
+	fmt.Print("->: " + string(message))
 	return
 }
 
-func encodeToRedisPrrotocolSpec() string {
-	formattedCommand := ""
-	for i := 1; i <= cNumberInCMD; i++ {
-		temp := arguments[i]
-		formattedCommand += fmt.Sprintf(cFormat, len(temp), temp)
-	}
-	formattedCommand += fmt.Sprintf(cFormat, 4, "STOP")
-	return formattedCommand
+func encodeToRedisProtocolSpec() string {
+	return redis.EncodeWordsToRedisSpec(arguments[1:], argNumbers[arguments[1]])
 }

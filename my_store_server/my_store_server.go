@@ -1,16 +1,14 @@
 package main
 
 import (
-	//"bufio"
-	"encoding/json"
 	"fmt"
+	"my_store/redis"
 	"net"
 	"os"
 )
 
 const (
 	cDefaultPort = "3000"
-	cFormat      = "$%d\r\n%s\r\n"
 )
 
 type cmdInfo struct {
@@ -21,6 +19,9 @@ type cmdInfo struct {
 	ValLen int    `json:"length_of_value"`
 	Val    string `json:"value"`
 }
+
+//GloablStore holds the store
+var GloablStore = make(map[string]string)
 
 var supportedCommands = []string{"GET", "DEL", "SET", "STOP"}
 
@@ -60,17 +61,34 @@ func handleConnection(c net.Conn) {
 			fmt.Println(err)
 			return
 		}
-		fmt.Println(string(temp))
+		//fmt.Println(string(temp))
 		break
 	}
 	/*here is the funniest part I am constructing a json
 	and sending it across
 	*/
-	responseJSON, _ := json.Marshal(deCodetoMap(temp))
-	fmt.Println(string(responseJSON))
-	c.Write([]byte("Recieved the following for client's record\n"))
-	c.Write(responseJSON)
-	c.Write([]byte(" Closing Client..\n"))
+
+	Decoded := deCodetoMap(temp)
+	//responseJSON, _ := json.Marshal(Decoded)
+	//fmt.Println(string(responseJSON))
+	//c.Write([]byte("Recieved the following for client's record: "))
+	//c.Write(responseJSON)
+
+	switch Decoded.Cmd {
+	case "SET":
+		go buildGlobalStore(Decoded.Key, Decoded.Val)
+	case "GET":
+		val := []string{getFromGlobalStore(Decoded.Key)}
+		encoded := redis.EncodeWordsToRedisSpec(val, 1)
+		c.Write([]byte(encoded))
+	case "DEL":
+		go deleteFromGlabalStore(Decoded.Key)
+	default:
+		val := []string{"Unknown format"}
+		encoded := redis.EncodeWordsToRedisSpec(val, 1)
+		c.Write([]byte(encoded))
+	}
+
 	c.Close()
 	fmt.Println("Closed.", c.RemoteAddr())
 }
@@ -78,14 +96,25 @@ func handleConnection(c net.Conn) {
 func deCodetoMap(temp []byte) cmdInfo {
 	cInfo := cmdInfo{}
 	str := string(temp)
-	fmt.Printf(str)
 	fmt.Sscanf(
 		str,
-		cFormat+cFormat+cFormat,
+		redis.CRedisFormat+redis.CRedisFormat+redis.CRedisFormat,
 		&cInfo.CmdLen, &cInfo.Cmd,
 		&cInfo.KeyLen, &cInfo.Key,
 		&cInfo.ValLen, &cInfo.Val,
 	)
 	fmt.Println(cInfo)
 	return cInfo
+}
+
+func buildGlobalStore(key string, value string) {
+	GloablStore[key] = value
+}
+
+func getFromGlobalStore(key string) string {
+	return GloablStore[key]
+}
+
+func deleteFromGlabalStore(key string) {
+	delete(GloablStore, key)
 }
