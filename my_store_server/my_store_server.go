@@ -23,7 +23,7 @@ type cmdInfo struct {
 //GloablStore holds the store
 var GloablStore = make(map[string]string)
 
-var supportedCommands = []string{"GET", "DEL", "SET", "STOP"}
+var supportedCommands = []string{"GET", "DEL", "SET"}
 
 func main() {
 	arguments := os.Args
@@ -68,7 +68,11 @@ func handleConnection(c net.Conn) {
 	and sending it across
 	*/
 
-	Decoded := deCodetoMap(temp)
+	Decoded, err := deCodetoReadableMap(temp)
+	var encoded string
+	if err != nil {
+		encoded = redis.EncodeErrorToRedisSpec(err.Error())
+	}
 	//responseJSON, _ := json.Marshal(Decoded)
 	//fmt.Println(string(responseJSON))
 	//c.Write([]byte("Recieved the following for client's record: "))
@@ -77,23 +81,24 @@ func handleConnection(c net.Conn) {
 	switch Decoded.Cmd {
 	case "SET":
 		go buildGlobalStore(Decoded.Key, Decoded.Val)
+		encoded = redis.CRedisSucces
 	case "GET":
 		val := []string{getFromGlobalStore(Decoded.Key)}
-		encoded := redis.EncodeWordsToRedisSpec(val, 1)
-		c.Write([]byte(encoded))
+		encoded = redis.EncodeWordsToRedisSpec(val, 1)
 	case "DEL":
 		go deleteFromGlabalStore(Decoded.Key)
+		encoded = redis.CREdisTrue
 	default:
 		val := []string{"Unknown format"}
-		encoded := redis.EncodeWordsToRedisSpec(val, 1)
-		c.Write([]byte(encoded))
+		encoded = redis.EncodeWordsToRedisSpec(val, 1)
 	}
 
+	c.Write([]byte(encoded))
 	c.Close()
 	fmt.Println("Closed.", c.RemoteAddr())
 }
 
-func deCodetoMap(temp []byte) cmdInfo {
+func deCodetoReadableMap(temp []byte) (cmdInfo, error) {
 	cInfo := cmdInfo{}
 	str := string(temp)
 	fmt.Sscanf(
@@ -104,7 +109,21 @@ func deCodetoMap(temp []byte) cmdInfo {
 		&cInfo.ValLen, &cInfo.Val,
 	)
 	fmt.Println(cInfo)
-	return cInfo
+	return cInfo, errorIfValidateCommandsGiven(cInfo)
+}
+
+/* Minimum validation to prove hos this work, cannot spend more time here*/
+func errorIfValidateCommandsGiven(cmdGiven cmdInfo) error {
+	validCommand := false
+	for _, elem := range supportedCommands {
+		if elem == cmdGiven.Cmd {
+			validCommand = true
+		}
+	}
+	if validCommand == false {
+		return fmt.Errorf("Redis Spec error in command")
+	}
+	return nil
 }
 
 func buildGlobalStore(key string, value string) {

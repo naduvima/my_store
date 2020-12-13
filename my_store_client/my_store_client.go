@@ -23,7 +23,7 @@ func main() {
 	var hostAndPort string
 	argNumbers = map[string]int{"GET": 2, "SET": 3, "DEL": 2}
 	hostAndPort = fmt.Sprintf("%s:%s", cDefaultHost, cDefaultPort)
-	if argNumbers[arguments[1]] == 0 || len(arguments[1:]) != argNumbers[arguments[1]] {
+	if len(arguments) == 1 || len(arguments[1:]) != argNumbers[arguments[1]] {
 		fmt.Println(cHelpText)
 		return
 	}
@@ -38,7 +38,12 @@ func main() {
 	fmt.Fprintf(c, encodeToRedisProtocolSpec())
 	message := make([]byte, 1024)
 	_, err = c.Read(message)
-	fmt.Print("->: " + string(message))
+	msg, err := redis.RESPhandler(message)
+	if err == nil {
+		fmt.Print("->: " + string(msg))
+	} else {
+		fmt.Print("->: " + string(err.Error()))
+	}
 	return
 }
 
